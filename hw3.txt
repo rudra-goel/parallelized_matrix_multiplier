@@ -1,0 +1,179 @@
+Homework 3 Part 4 - Rudra Goel
+
+Question 1.
+    Without shared memory, the audio blur program uses 24722156 global memory reads as reported by the ncu tool. 
+
+    With shared memory, the audio blur program uses 12423246 global memory reads as reported by the ncuy tool. 
+
+
+Question 2. 
+    For input matrices of 1024 x 1024 with block size of 8x8:
+    I ran each program 10 times. Below is the average execution time. 
+        Shared Memory Matrix Multiply:  0.573920 ms
+        Naive Matrix Multiply:          0.869152 ms
+        CPU Based Matrix Multiply:      4383.504 ms
+
+    The shared memory version performs better than the naive version under the intial conditions. 
+
+    I noticed that we achieve better performance in the tiled version when the block size is large (>8)
+
+    Regardless of tiled or naive approach, the parallelized version of the MAT MUL 
+        is significantly better than the CPU version
+    We can achieve around a ~6,200x speedup.
+
+Question 3. 
+    Global reads for Mat Mul without shared mem ~ 67108864 reads
+    Global reads for Mat Mul with shared mem    ~ 12582912 reads
+
+    The number of global reads for the tiled approach is lesser than the number of 
+    reads performed by the naive version because the latter approach repeats global memory reads. 
+    More specifically, for every thread in a block, the naive version will read out a row and column
+    in its entirety; its neighboring threads will also read out those same values from global memory
+    increasing the overall reads from GDRAM. For example, the code in the naive approach indicates
+    that all threads in the same block with the same y index will read the same row of d_A from GDRAM
+    since it's row index is constant throughout all threads with that y idx. 
+    
+    The tiled approach ensures that inputs are read from GDRAM once and put into shared memory so that a thread and its neighbors can access inputs from the shmem buffer, 
+    and not have to duplicate reads from GDRAM. The tiled version first copies the i-th tile of 
+    input data from GDRAM into shared memory and then computes a partial sum of products
+    
+    This is what causes a nearly 5x reduction in the number of GDRAM reads.
+
+    Global writes for Mat Mul without shared mem  ~ 32768 writes
+    Global writes for Mat Mul with shared mem     ~ 32768 writes
+
+    The number of global writes for the shared memory case is exactly the number of writes for the naive approach. This occurs because in both cases the C matrix dimensions divides evenly by the block size
+    and no thread needs to compute two outputs at. 
+
+    In the case where the C dimensions are not evenyl divisible by the block dimensions:
+    (1024 x 1024 matrix with block size of 7x7)
+    
+    Global writes for Mat Mul without shared mem  ~ 43071 writes
+    Global writes for Mat Mul with shared mem     ~ 43071 writes
+
+    This causes the number of writes to increase as one thread must write to both its actual index and 
+    keep track of the value of extra cells on the edges of the matrix not encompassed by the thread block
+
+    The program handles this by keeping track of a running partial sum that is stored in a register. 
+
+    Just before the kernel is completed, we assign the output matrix at idx defined by the thread idx 
+    the value of the tracked running sum. This results in the same number of writes to GDRAM in both cases. 
+
+Question 4.
+    Occupancy = average # of active warps  / theoretical max # of warps
+
+    First, I test with the maximum number of threads able to run in a block: 1024 (32x32)
+    
+    10 x 10
+        --> Performance: 0.669632 ms
+        --> Occupancy: 56.42 / 64 ~ 0.8816
+
+    21 x 21 
+        --> Performance: 0.541984 ms
+        --> Occupancy: 51.26 / 64 ~ 0.8009
+
+    28 x 28 
+        --> Performance: 0.623072 ms
+        --> Occupancy: 24.98 / 25 ~ 0.9992
+
+    32 x 32
+        --> Performance: 0.342944 ms
+        --> Occupancy:  60.07 / 64 ~ 0.9386
+
+    Even though the block size of 28 achieved an occupancy far greater than any other trial, 
+    its runtime was nearly double that of the last trial in which we maxed out the number of threads in a block (1024)
+    
+    The occupancy of trial 4 saw a 6.4% increase in occupancy than that of trial 5 
+    BUT, trial 5 had a 1.817x speedup in execution time and is thus the preferred block size (32)
+
+Question 5. 
+    We know that shared memory is common to all threads in a thread block. 
+    We can use a thread's relative position to determine the number of 
+        shared memory accesses possible for a given blur area. 
+
+    We know that the total number of memory accesses must be the amount of pixels within the blur area. 
+
+    If we consider all of the cells in the blur area, then for any thread within the
+        thread block, the pixels stored in shared memory will constitute a subset of the blur area
+
+    We need to determine the dimensions of that subset, compute the total pixels within that subset --> amount of shared mem accesses
+
+    The amount of global accesses is simply the different of the total accesses and the shmem accesses
+
+    psuedocode:
+        function clac_ratio(blur_size, block_size)
+            total_in_blur_area = blur_size ^ 2
+            half = (blur_size - 1) / 2
+
+            shmem_accesses, gdram_accesses = 0
+
+            for each thread in thread_block
+                sub_dim_width, sum_dim_height = 0;
+
+                num_cells_to_left = blockDim.x - threadIdx.x - 1
+                num_cells_to_right = threadIdx
+
+                num_cells_to_top = blockDim.y - threadIdx.y - 1
+                num_cells_to_bottom = threadIdx.y
+
+                if num_cells_to_left >= half
+                    sub_dim_width += half
+                else
+                    sub_dim_width += num_cells_to_left
+                end if
+
+                if num_cells_to_right >= half
+                    sub_dim_width += half
+                else
+                    sub_dim_width += num_cells_to_right
+                end if
+
+                if num_cells_to_bottom >= half
+                    sub_dim_height += half;
+                else 
+                    sub_dim_height += num_cells_to_bottom
+                end if
+                
+                if num_cells_to_top >= half
+                    sub_dim_height += half;
+                else
+                    sub_dim_height += num_cells_to_top
+                end if
+
+                //for the current pixel, add a dimension
+                sub_dim_width++
+                sub_dim_height++
+
+                shmem_accesses += sub_dim_height * sub_dim_width
+                gdram_accesses += total_in_blur_area - shmem_accesses
+            end loop
+
+            return shmem_accesses / gdram_accesses
+
+    I created a CUDA program that implements the psuedocode above. 
+    It launches a kernel and for each thread within the block, it determines 
+        the potential amount of shared memory accesses and global mem accesses 
+        based on the thread's position within the thread block
+
+    Testing for each circumstance, it yields the folllowing ratio
+        (a) Blur Size 21x21 with Block Size 16x16
+                Total Shared Mem Accesses: 51506 
+                Total Global Mem Accesses: 61390 
+                Ratio: 0.839 
+        
+        (b) Blur Size 21x21 with Block Size 32x32
+            Total Shared Mem Accesses: 322114 
+            Total Global Mem Accesses: 129470 
+            Ratio: 2.488 
+
+        (c) Blur Size 33x33 with Block Size 32x32
+            Total Shared Mem Accesses: 625536 
+            Total Global Mem Accesses: 489600 
+            Ratio: 1.278
+
+        (d) Blur Size 33x33 with Block Size 1x1
+            Total Shared Mem Accesses: 1 
+            Total Global Mem Accesses: 1088 
+            Ratio: 0.001 
+                
+    
