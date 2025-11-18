@@ -299,8 +299,8 @@ __global__ void matrixMulCUDATiled() {
 
 }
 
-
-int main(int argc, char **argv) {
+// int main(int argc, char **argv) {
+int mainMatrix(int argc, char **argv) {
     unsigned int mem_size_A, mem_size_B, mem_size_C;
     unsigned int x, y;
     float msec;
