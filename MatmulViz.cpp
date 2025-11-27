@@ -14,6 +14,8 @@ OpenMP-based parallelism.
 #include <SFML/Graphics.hpp>
 #include <cmath>
 #include <iostream>
+#include <random>
+#include <chrono>
 
 /** @brief Width of the SFML render window. */
 int windowWidth = 800;
@@ -21,8 +23,10 @@ int windowWidth = 800;
 /** @brief Height of the SFML render window. */
 int windowHeight = 600;
 
-int matrixWidth = 256;
-int matrixHeight = 256;
+int matrixWidth = 32;
+int matrixHeight = 32;
+
+int mat[32][32];
 
 int mainMatrix(int argc, char **argv);
 
@@ -39,7 +43,19 @@ int mainMatrix(int argc, char **argv);
 
 int main(int argc, char* argv[])
 {
-    mainMatrix(argc, argv);
+    unsigned seed = static_cast<unsigned>(std::chrono::system_clock::now().time_since_epoch().count());
+    std::mt19937 gen(seed);
+
+    std::uniform_int_distribution<int> distrib(0, 9);
+    // mainMatrix(argc, argv);
+
+    for (int i = 0; i < matrixHeight; i++)
+    {
+        for (int j = 0; j < matrixWidth; j++)
+        {
+            mat[i][j] = distrib(gen);
+        }
+    }
 
     // Create render window
     sf::VideoMode vm(windowWidth, windowHeight);
@@ -84,6 +100,22 @@ int main(int argc, char* argv[])
         }
     }
 
+    sf::Font font;
+    if (!font.loadFromFile("arial.ttf"))
+    {
+        std::cerr << "Arial font was not loaded! Exiting" << std::endl;
+        return 1;
+    }
+    sf::Text numberTexts[32 * 32];
+    for (int i = 0; i < 32 * 32; i++)
+    {
+        numberTexts[i].setFont(font);
+        numberTexts[i].setString(std::to_string(mat[i / 32][i % 32]));
+        numberTexts[i].setCharacterSize(16);
+        numberTexts[i].setFillColor(sf::Color::Red);
+        numberTexts[i].setPosition(153.5 + 500.0f / 32 * (i % 32), 48 + 500.0f / 32 * (i / 32));
+    }
+
     // Main Game Loop
     while (window.isOpen())
     {
@@ -106,6 +138,10 @@ int main(int argc, char* argv[])
         window.clear(sf::Color::White);
         window.draw(matrixOutline);
         window.draw(matrixLines);
+        for (int i = 0; i < 32 * 32; i++)
+        {
+            window.draw(numberTexts[i]);
+        }
         window.display();
         std::cout << "FPS: " << 1.0f / processingClock.restart().asSeconds() << std::endl;
         

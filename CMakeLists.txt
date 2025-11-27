@@ -23,7 +23,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 link_directories(${PROJECT_SOURCE_DIR}/lib)
 
-set(SOURCES ${PROJECT_SOURCE_DIR}/GameOfLife.cpp ${PROJECT_SOURCE_DIR}/matrix.cu)
+set(SOURCES ${PROJECT_SOURCE_DIR}/MatmulViz.cpp ${PROJECT_SOURCE_DIR}/matrix.cu)
 
 add_executable(MatmulViz ${SOURCES})
 
