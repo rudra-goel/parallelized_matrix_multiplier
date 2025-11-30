@@ -60,17 +60,17 @@ int main(int argc, char* argv[])
         }
     }
 
-    for (int i = 0; i < matrixHeight; i++)
-    {
-        for (int j = 0; j < matrixWidth; j++)
-        {
-            matOut[i][j] = 0;
-            for (int k = 0; k < matrixWidth; k++)
-            {
-                matOut[i][j] += matA[i][k] * matB[k][j];
-            }
-        }
-    }
+    // for (int i = 0; i < matrixHeight; i++)
+    // {
+    //     for (int j = 0; j < matrixWidth; j++)
+    //     {
+    //         matOut[i][j] = 0;
+    //         for (int k = 0; k < matrixWidth; k++)
+    //         {
+    //             matOut[i][j] += matA[i][k] * matB[k][j];
+    //         }
+    //     }
+    // }
 
     // Create render window
     sf::VideoMode vm(windowWidth, windowHeight);
@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
         matOutNumberTexts[i].setString(std::to_string(matOut[i / 32][i % 32]));
         matOutNumberTexts[i].setCharacterSize(10);
         matOutNumberTexts[i].setFillColor(sf::Color::Blue);
-        matOutNumberTexts[i].setPosition(matOutLeftEdgeX + 3.5 + matOutHeight / 32 * (i % 32), 56 + matOutHeight / 32 * (i / 32));
+        matOutNumberTexts[i].setPosition(matOutLeftEdgeX + 9.5 + matOutHeight / 32 * (i % 32), 56 + matOutHeight / 32 * (i / 32));
     }
 
     sf::Text multiplySign;
@@ -186,6 +186,39 @@ int main(int argc, char* argv[])
     equalSign.setFillColor(sf::Color::Black);
     multiplySign.setPosition(matBLeftEdgeX - 24, matATopEdgeY + matAHeight / 2 - 25);
     equalSign.setPosition(matOutLeftEdgeX - 24, matATopEdgeY + matAHeight / 2 - 23);
+
+    sf::RectangleShape matACurrElem(sf::Vector2f(matAHeight / 32.0f, matAHeight / 32.0f));
+    sf::RectangleShape matBCurrElem(sf::Vector2f(matBHeight / 32.0f, matBHeight / 32.0f));
+    sf::RectangleShape matOutCurrElem(sf::Vector2f(matOutHeight / 32.0f, matOutHeight / 32.0f));
+    matACurrElem.setPosition(matALeftEdgeX, matATopEdgeY);
+    matBCurrElem.setPosition(matBLeftEdgeX, matBTopEdgeY);
+    matOutCurrElem.setPosition(matOutLeftEdgeX, 50);
+    matACurrElem.setFillColor(sf::Color(51, 153, 255));
+    matBCurrElem.setFillColor(sf::Color(51, 153, 255));
+    matOutCurrElem.setFillColor(sf::Color::Red);
+
+    int iteration = 0;
+    sf::Clock iterationTimer;
+    iterationTimer.restart();
+
+    float matACurrElemX = matALeftEdgeX;
+    float matACurrElemY = matATopEdgeY;
+    float matBCurrElemX = matBLeftEdgeX;
+    float matBCurrElemY = matBTopEdgeY;
+    float matOutCurrElemX = matOutLeftEdgeX;
+    float matOutCurrElemY = 50;
+
+    matOut[0][0] = matA[0][0] * matB[0][0];
+    matOutNumberTexts[0].setString(std::to_string(matOut[0][0]));
+    std::string str = matOutNumberTexts[0].getString();
+    if (str.length() == 2)
+    {
+        matOutNumberTexts[0].setPosition(matOutLeftEdgeX + 6.5, matOutNumberTexts[0].getPosition().y);
+    }
+
+    int i = 0;
+    int j = 0;
+    int k = 0;
 
     // Main Game Loop
     while (window.isOpen())
@@ -206,10 +239,68 @@ int main(int argc, char* argv[])
             }
         }
 
+        if (iterationTimer.getElapsedTime().asMilliseconds() > 20)
+        {
+            iterationTimer.restart();
+            if (iteration < 32 * 32 * 32 - 1)
+            {
+                ++iteration;
+                if (iteration % (32 * 32) == 0)
+                {
+                    i++;
+                    j = 0;
+                    k = 0;
+                    matACurrElemX = matALeftEdgeX;
+                    matACurrElemY += matAHeight / 32.0f;
+                    matBCurrElemX = matBLeftEdgeX;
+                    matBCurrElemY = matBTopEdgeY;
+                    matOutCurrElemX = matOutLeftEdgeX;
+                    matOutCurrElemY += matOutHeight / 32;
+                }
+                else if (iteration % 32 == 0)
+                {
+                    j++;
+                    k = 0;
+                    matACurrElemX = matALeftEdgeX;
+                    matBCurrElemX += matBHeight / 32;
+                    matBCurrElemY = matBTopEdgeY;
+                    matOutCurrElemX += matOutHeight / 32;
+                }
+                else
+                {
+                    k++;
+                    matACurrElemX += matAHeight / 32;
+                    matBCurrElemY += matBHeight / 32;
+                }
+                matOut[i][j] += matA[i][k] * matB[k][j];
+                matOutNumberTexts[32 * i + j].setString(std::to_string(matOut[i][j]));
+                str = std::to_string(matOut[i][j]);
+                if (str.length() == 2)
+                {
+                    matOutNumberTexts[32 * i + j].setPosition(matOutLeftEdgeX + 6.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[32 * i + j].getPosition().y);
+                }
+                else if (str.length() == 3)
+                {
+                    matOutNumberTexts[32 * i + j].setPosition(matOutLeftEdgeX + 3.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[32 * i + j].getPosition().y);
+                }
+                else if (str.length() == 4)
+                {
+                    matOutNumberTexts[32 * i + j].setPosition(matOutLeftEdgeX + 0.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[32 * i + j].getPosition().y);
+                }
+            }
+        }
+
+        matACurrElem.setPosition(matACurrElemX, matACurrElemY);
+        matBCurrElem.setPosition(matBCurrElemX, matBCurrElemY);
+        matOutCurrElem.setPosition(matOutCurrElemX, matOutCurrElemY);
+
         window.clear(sf::Color::White);
         window.draw(matAOutline);
         window.draw(matBOutline);
         window.draw(matOutOutline);
+        window.draw(matACurrElem);
+        window.draw(matBCurrElem);
+        window.draw(matOutCurrElem);
         window.draw(matALines);
         window.draw(matBLines);
         window.draw(matOutLines);
