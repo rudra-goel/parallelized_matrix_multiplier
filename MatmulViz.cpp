@@ -18,15 +18,17 @@ OpenMP-based parallelism.
 #include <chrono>
 
 /** @brief Width of the SFML render window. */
-int windowWidth = 800;
+int windowWidth = 1920;
 
 /** @brief Height of the SFML render window. */
-int windowHeight = 600;
+int windowHeight = 1080;
 
 int matrixWidth = 32;
 int matrixHeight = 32;
 
-int mat[32][32];
+int matA[32][32];
+int matB[32][32];
+int matOut[32][32];
 
 int mainMatrix(int argc, char **argv);
 
@@ -53,7 +55,20 @@ int main(int argc, char* argv[])
     {
         for (int j = 0; j < matrixWidth; j++)
         {
-            mat[i][j] = distrib(gen);
+            matA[i][j] = distrib(gen);
+            matB[i][j] = distrib(gen);
+        }
+    }
+
+    for (int i = 0; i < matrixHeight; i++)
+    {
+        for (int j = 0; j < matrixWidth; j++)
+        {
+            matOut[i][j] = 0;
+            for (int k = 0; k < matrixWidth; k++)
+            {
+                matOut[i][j] += matA[i][k] * matB[k][j];
+            }
         }
     }
 
@@ -65,37 +80,66 @@ int main(int argc, char* argv[])
     sf::Clock processingClock;
     long long processingTime = 0;
 
-    sf::RectangleShape matrixOutline(sf::Vector2f(500, 500));
-    matrixOutline.setOutlineColor(sf::Color::Black);
-    matrixOutline.setPosition(150, 50);
-    matrixOutline.setOutlineThickness(1);
-    sf::VertexArray matrixLines(sf::Lines, (matrixWidth - 1) * 2 + (matrixHeight - 1) * 2);
-    for (int i = 1; i <= matrixLines.getVertexCount(); i++)
+    int matALeftEdgeX = 25;
+    int matATopEdgeY = 200;
+    float matAHeight = 400.0f;
+    int matBLeftEdgeX = 462.5;
+    int matBTopEdgeY = 200;
+    float matBHeight = matAHeight;
+    int matOutLeftEdgeX = 900;
+    float matOutHeight = 800.0f;
+
+    sf::RectangleShape matAOutline(sf::Vector2f(matAHeight, matAHeight));
+    sf::RectangleShape matBOutline(sf::Vector2f(matBHeight, matBHeight));
+    sf::RectangleShape matOutOutline(sf::Vector2f(matOutHeight, matOutHeight));
+    matAOutline.setOutlineColor(sf::Color::Black);
+    matBOutline.setOutlineColor(sf::Color::Black);
+    matOutOutline.setOutlineColor(sf::Color::Black);
+    matAOutline.setPosition(matALeftEdgeX, matATopEdgeY);
+    matBOutline.setPosition(matBLeftEdgeX, matBTopEdgeY);
+    matOutOutline.setPosition(matOutLeftEdgeX, 50);
+    matAOutline.setOutlineThickness(1);
+    matBOutline.setOutlineThickness(1);
+    matOutOutline.setOutlineThickness(1);
+    sf::VertexArray matALines(sf::Lines, (matrixWidth - 1) * 2 + (matrixHeight - 1) * 2);
+    sf::VertexArray matBLines(sf::Lines, (matrixWidth - 1) * 2 + (matrixHeight - 1) * 2);
+    sf::VertexArray matOutLines(sf::Lines, (matrixWidth - 1) * 2 + (matrixHeight - 1) * 2);
+    for (int i = 1; i <= matALines.getVertexCount(); i++)
     {
-        matrixLines[i-1].color = sf::Color::Black;
+        matALines[i-1].color = sf::Color::Black;
+        matBLines[i-1].color = sf::Color::Black;
+        matOutLines[i-1].color = sf::Color::Black;
         // Vertical lines
-        if (i <= matrixLines.getVertexCount() / 2)
+        if (i <= matALines.getVertexCount() / 2)
         {
             if (i % 2 == 1)
             {
-                matrixLines[i-1].position = sf::Vector2f(150 + 500.0f / matrixWidth * std::ceil(i / 2.0f), 50);
+                matALines[i-1].position = sf::Vector2f(matALeftEdgeX + matAHeight / matrixWidth * std::ceil(i / 2.0f), matATopEdgeY);
+                matBLines[i-1].position = sf::Vector2f(matBLeftEdgeX + matBHeight / matrixWidth * std::ceil(i / 2.0f), matBTopEdgeY);
+                matOutLines[i-1].position = sf::Vector2f(matOutLeftEdgeX + matOutHeight / matrixWidth * std::ceil(i / 2.0f), 50);
             }
             else
             {
-                matrixLines[i-1].position = sf::Vector2f(150 + 500.0f / matrixWidth * (i / 2), 550);
+                matALines[i-1].position = sf::Vector2f(matALeftEdgeX + matAHeight / matrixWidth * (i / 2), matAHeight + matATopEdgeY);
+                matBLines[i-1].position = sf::Vector2f(matBLeftEdgeX + matBHeight / matrixWidth * (i / 2), matBHeight + matBTopEdgeY);
+                matOutLines[i-1].position = sf::Vector2f(matOutLeftEdgeX + matOutHeight / matrixWidth * (i / 2), matOutHeight + 50);
             }
         }
         // Horizontal lines
         else
         {
-            int j = i - matrixLines.getVertexCount() / 2;
+            int j = i - matALines.getVertexCount() / 2;
             if (j % 2 == 1)
             {
-                matrixLines[i-1].position = sf::Vector2f(150, 50 + 500.0f / matrixHeight * std::ceil(j / 2.0f));
+                matALines[i-1].position = sf::Vector2f(matALeftEdgeX, matATopEdgeY + matAHeight / matrixHeight * std::ceil(j / 2.0f));
+                matBLines[i-1].position = sf::Vector2f(matBLeftEdgeX, matBTopEdgeY + matBHeight / matrixHeight * std::ceil(j / 2.0f));
+                matOutLines[i-1].position = sf::Vector2f(matOutLeftEdgeX, 50 + matOutHeight / matrixHeight * std::ceil(j / 2.0f));
             }
             else
             {
-                matrixLines[i-1].position = sf::Vector2f(650, 50 + 500.0f / matrixHeight * (j / 2));
+                matALines[i-1].position = sf::Vector2f(matALeftEdgeX + matAHeight, matATopEdgeY + matAHeight / matrixHeight * (j / 2));
+                matBLines[i-1].position = sf::Vector2f(matBLeftEdgeX + matBHeight, matBTopEdgeY + matBHeight / matrixHeight * (j / 2));
+                matOutLines[i-1].position = sf::Vector2f(matOutLeftEdgeX + matOutHeight, 50 + matOutHeight / matrixHeight * (j / 2));
             }
         }
     }
@@ -106,15 +150,42 @@ int main(int argc, char* argv[])
         std::cerr << "Arial font was not loaded! Exiting" << std::endl;
         return 1;
     }
-    sf::Text numberTexts[32 * 32];
+    sf::Text matANumberTexts[32 * 32];
+    sf::Text matBNumberTexts[32 * 32];
+    sf::Text matOutNumberTexts[32 * 32];
     for (int i = 0; i < 32 * 32; i++)
     {
-        numberTexts[i].setFont(font);
-        numberTexts[i].setString(std::to_string(mat[i / 32][i % 32]));
-        numberTexts[i].setCharacterSize(16);
-        numberTexts[i].setFillColor(sf::Color::Red);
-        numberTexts[i].setPosition(153.5 + 500.0f / 32 * (i % 32), 48 + 500.0f / 32 * (i / 32));
+        matANumberTexts[i].setFont(font);
+        matANumberTexts[i].setString(std::to_string(matA[i / 32][i % 32]));
+        matANumberTexts[i].setCharacterSize(12);
+        matANumberTexts[i].setFillColor(sf::Color::Red);
+        matANumberTexts[i].setPosition(matALeftEdgeX + 2.5 + matAHeight / 32 * (i % 32), matATopEdgeY - 1.5 + matAHeight / 32 * (i / 32));
+
+        matBNumberTexts[i].setFont(font);
+        matBNumberTexts[i].setString(std::to_string(matB[i / 32][i % 32]));
+        matBNumberTexts[i].setCharacterSize(12);
+        matBNumberTexts[i].setFillColor(sf::Color::Red);
+        matBNumberTexts[i].setPosition(matBLeftEdgeX + 2.5 + matBHeight / 32 * (i % 32), matBTopEdgeY - 1.5 + matBHeight / 32 * (i / 32));
+
+        matOutNumberTexts[i].setFont(font);
+        matOutNumberTexts[i].setString(std::to_string(matOut[i / 32][i % 32]));
+        matOutNumberTexts[i].setCharacterSize(10);
+        matOutNumberTexts[i].setFillColor(sf::Color::Blue);
+        matOutNumberTexts[i].setPosition(matOutLeftEdgeX + 3.5 + matOutHeight / 32 * (i % 32), 56 + matOutHeight / 32 * (i / 32));
     }
+
+    sf::Text multiplySign;
+    sf::Text equalSign;
+    multiplySign.setFont(font);
+    equalSign.setFont(font);
+    multiplySign.setString("x");
+    equalSign.setString("=");
+    multiplySign.setCharacterSize(18);
+    equalSign.setCharacterSize(18);
+    multiplySign.setFillColor(sf::Color::Black);
+    equalSign.setFillColor(sf::Color::Black);
+    multiplySign.setPosition(matBLeftEdgeX - 24, matATopEdgeY + matAHeight / 2 - 25);
+    equalSign.setPosition(matOutLeftEdgeX - 24, matATopEdgeY + matAHeight / 2 - 23);
 
     // Main Game Loop
     while (window.isOpen())
@@ -136,11 +207,19 @@ int main(int argc, char* argv[])
         }
 
         window.clear(sf::Color::White);
-        window.draw(matrixOutline);
-        window.draw(matrixLines);
+        window.draw(matAOutline);
+        window.draw(matBOutline);
+        window.draw(matOutOutline);
+        window.draw(matALines);
+        window.draw(matBLines);
+        window.draw(matOutLines);
+        window.draw(multiplySign);
+        window.draw(equalSign);
         for (int i = 0; i < 32 * 32; i++)
         {
-            window.draw(numberTexts[i]);
+            window.draw(matANumberTexts[i]);
+            window.draw(matBNumberTexts[i]);
+            window.draw(matOutNumberTexts[i]);
         }
         window.display();
         std::cout << "FPS: " << 1.0f / processingClock.restart().asSeconds() << std::endl;
