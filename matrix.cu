@@ -34,15 +34,15 @@ method with CUDA is the fastest.
 
 
 // device-side arrays
-__device__ float d_A[A_HEIGHT][A_WIDTH];
-__device__ float d_B[B_HEIGHT][B_WIDTH];
-__device__ float d_C[C_HEIGHT][C_WIDTH];
+__device__ float dA[A_HEIGHT][A_WIDTH];
+__device__ float dB[B_HEIGHT][B_WIDTH];
+__device__ float dC[C_HEIGHT][C_WIDTH];
 
 // host-side arrays
-float h_A[A_HEIGHT][A_WIDTH];
-float h_B[B_HEIGHT][B_WIDTH];
-float h_C[C_HEIGHT][C_WIDTH];
-float h_C_ref[C_HEIGHT][C_WIDTH];
+float hA[A_HEIGHT][A_WIDTH];
+float hB[B_HEIGHT][B_WIDTH];
+float hC[C_HEIGHT][C_WIDTH];
+float hCRef[C_HEIGHT][C_WIDTH];
 
 int matrixMulTest(float C[C_HEIGHT][C_WIDTH], float Cref[C_HEIGHT][C_WIDTH]);
 
@@ -70,13 +70,13 @@ void matrixMulCPU(float A[A_HEIGHT][A_WIDTH], float B[C_HEIGHT][C_WIDTH], float 
 
 /*
     This is a GPU-based matrix multiply.
-    It calculates output matrix d_C, from the input matrices d_A and d_B.
+    It calculates output matrix dC, from the input matrices dA and dB.
 */
 __global__ void matrixMulCUDA()
 {
     // TODO implement simple CUDA matrix multiply here
-    // inputs: d_A, d_B (global variables)
-    // output: d_C (global variable)
+    // inputs: dA, dB (global variables)
+    // output: dC (global variable)
     // do not use shared memory
     // note the launch parameters: this kernel is called for each
     //         cell in the output matrix
@@ -90,54 +90,54 @@ __global__ void matrixMulCUDA()
     //loop through the B_HEIGHT or A_WIDTH (either works since they have to match for matrices to multiply)
     for(int i = 0; i < B_HEIGHT; i++)
     {
-        total += d_A[y][i] * d_B[i][x];
+        total += dA[y][i] * dB[i][x];
     }
-    d_C[y][x] = total;
+    dC[y][x] = total;
 
     //if this block is on the ending edge of the grid
     //need the threads in this block to compute the output matrix value for the cells
     if (blockIdx.x == gridDim.x - 1)
     {
         //increment the current thread index's X position by the size of the block dim
-        int col_new = x + blockDim.x;
+        int colNew = x + blockDim.x;
         //check to make sure the new x index is still within bounds
-        if (col_new < C_WIDTH)
+        if (colNew < C_WIDTH)
         {
             total = 0;
             for (int i = 0; i < B_HEIGHT; i++)
             {
-                total += d_A[y][i] * d_B[i][col_new];
+                total += dA[y][i] * dB[i][colNew];
             }
-            d_C[y][col_new] = total;
+            dC[y][colNew] = total;
         }
     }
     if (blockIdx.y == gridDim.y - 1)
     {
         
-        int row_new = y + blockDim.y;
+        int rowNew = y + blockDim.y;
         
-        if (row_new < C_HEIGHT)
+        if (rowNew < C_HEIGHT)
         {
             total = 0;
             for(int i = 0; i < B_HEIGHT; i++)
             {
-                total += d_A[row_new][i] * d_B[i][x];
+                total += dA[rowNew][i] * dB[i][x];
             }
-            d_C[row_new][x] = total;
+            dC[rowNew][x] = total;
         }
     }
     
     //force the corner block to handle the cells not yet covered in the corner
     if (blockIdx.x == gridDim.x - 1 && blockIdx.y == gridDim.y - 1)
     {
-        int col_new = x + blockDim.x;
-        int row_new = y + blockDim.y;
+        int colNew = x + blockDim.x;
+        int rowNew = y + blockDim.y;
 
-        if (row_new < C_HEIGHT && col_new < C_WIDTH)
+        if (rowNew < C_HEIGHT && colNew < C_WIDTH)
         {
             for (int i = 0; i < B_HEIGHT; i++)
             {
-                d_C[row_new][col_new] += d_A[row_new][i] * d_B[i][col_new];
+                dC[rowNew][colNew] += dA[rowNew][i] * dB[i][colNew];
             }
         }
 
@@ -147,37 +147,37 @@ __global__ void matrixMulCUDA()
 
 /*
     This is a GPU-based matrix multiply.
-    It calculates output matrix d_C, from the input matrices d_A and d_B.
+    It calculates output matrix dC, from the input matrices dA and dB.
     It uses shared memory.
 */
 __global__ void matrixMulCUDATiled()
 {
     // TODO implement tiled CUDA matrix multiply here
-    // inputs: d_A, d_B (global variables)
-    // output: d_C (global variable)
+    // inputs: dA, dB (global variables)
+    // output: dC (global variable)
     // use tiled shared memory as described in the assignment
     // note the launch parameters: this kernel is called for each
     //         cell in the output matrix
 
     //allocate shared memory for the chunks of A and B statically
     //size of each is BLOCK_SIZE * BLOCK_SIZE * 4 bytes
-    __shared__ float chunk_A_buffer[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float chunk_B_buffer[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float chunkABuffer[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float chunkBBuffer[BLOCK_SIZE][BLOCK_SIZE];
 
     //this is a buffer for copying values from the edges of matricesd A and B
     //that are not encompassed by another block due to insufficuent blocks being launched by the kernel
-    __shared__ float edge_cells_A_buffer[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float edge_cells_B_buffer[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float edgeCellsABuffer[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float edgeCellsBBuffer[BLOCK_SIZE][BLOCK_SIZE];
 
     //figure out what thread I currently am in the overall matrix C
-    int global_x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-    int global_y = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+    int globalX = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+    int globalY = blockIdx.y * BLOCK_SIZE + threadIdx.y;
 
-    int global_edge_x = global_x + BLOCK_SIZE;
-    int global_edge_y = global_y + BLOCK_SIZE;
+    int globalEdgeX = globalX + BLOCK_SIZE;
+    int globalEdgeY = globalY + BLOCK_SIZE;
 
-    bool remaining_cells_x = C_WIDTH % BLOCK_SIZE != 0;
-    bool remaining_cells_y = C_HEIGHT % BLOCK_SIZE != 0;
+    bool remainingCellsX = C_WIDTH % BLOCK_SIZE != 0;
+    bool remainingCellsY = C_HEIGHT % BLOCK_SIZE != 0;
 
 
     /**
@@ -190,41 +190,41 @@ __global__ void matrixMulCUDATiled()
 
     float total = 0;
 
-    float total_x_overflow = 0;
-    float total_y_overflow = 0;
-    float total_corner_overflow = 0;
+    float totalXOverflow = 0;
+    float totalYOverflow = 0;
+    float totalCornerOverflow = 0;
 
 
     //guard against case where the A_WIDTH does not divide evenly with BLOCK_SIZE
     //so must go A_width + 1 / block_size and guard against threads that are outside of the dims
-    for (int tile_iteration = 0; tile_iteration < (A_WIDTH / BLOCK_SIZE) + 1; tile_iteration++)
+    for (int tileIteration = 0; tileIteration < (A_WIDTH / BLOCK_SIZE) + 1; tileIteration++)
     {
 
         //these two vars are used for copying the right data from inputs A and B into shmem
         //based on the loop iteration, offset the x dim of the thread 
-        int x_tiled_offset = tile_iteration * BLOCK_SIZE + threadIdx.x;
+        int xTiledOffset = tileIteration * BLOCK_SIZE + threadIdx.x;
         //based on the loop iteration, offset the y dim of the thread 
-        int y_tiled_offset = tile_iteration * BLOCK_SIZE + threadIdx.y;
+        int yTiledOffset = tileIteration * BLOCK_SIZE + threadIdx.y;
         
 
-        int buffer_end = tile_iteration == A_WIDTH / BLOCK_SIZE ? A_WIDTH % BLOCK_SIZE : BLOCK_SIZE;
+        int bufferEnd = tileIteration == A_WIDTH / BLOCK_SIZE ? A_WIDTH % BLOCK_SIZE : BLOCK_SIZE;
 
-        if (x_tiled_offset < A_WIDTH) {
+        if (xTiledOffset < A_WIDTH) {
             //have the thread within the currentn block copy data into the A and B shared mem buffer
-            chunk_A_buffer[threadIdx.y][threadIdx.x] = d_A[global_y][x_tiled_offset];
+            chunkABuffer[threadIdx.y][threadIdx.x] = dA[globalY][xTiledOffset];
         }
 
-        if (y_tiled_offset < B_HEIGHT) {
-            chunk_B_buffer[threadIdx.y][threadIdx.x] = d_B[y_tiled_offset][global_x];
+        if (yTiledOffset < B_HEIGHT) {
+            chunkBBuffer[threadIdx.y][threadIdx.x] = dB[yTiledOffset][globalX];
         }
 
         //sync all the threads in a block on each tile iteration (for writing to shmem)
         //after synced, guarunteed that shmem buffer is complete for A and B tiles
         __syncthreads();
         //compute partial sum of products
-        for (int i = 0; i < buffer_end; i++)
+        for (int i = 0; i < bufferEnd; i++)
         {
-            total += chunk_A_buffer[threadIdx.y][i] * chunk_B_buffer[i][threadIdx.x];
+            total += chunkABuffer[threadIdx.y][i] * chunkBBuffer[i][threadIdx.x];
         }
         //wait till all threads in the block finish with the partial sum
         __syncthreads();
@@ -238,7 +238,7 @@ __global__ void matrixMulCUDATiled()
         */
 
         // first check if we are on an edge block in the x dimension
-        if (remaining_cells_x && blockIdx.x == gridDim.x - 1)
+        if (remainingCellsX && blockIdx.x == gridDim.x - 1)
         {
             
             /**
@@ -247,11 +247,11 @@ __global__ void matrixMulCUDATiled()
                     2. check to see if the row corresponding to the current tile iteration
                         is within the height of B since the tile size are not guarunteed to be evenly divisible by te hieght of B
             */
-            if (global_edge_x < C_WIDTH && y_tiled_offset < B_HEIGHT)
+            if (globalEdgeX < C_WIDTH && yTiledOffset < B_HEIGHT)
             {
                 //the shared memory buffer that was copied on this tile iteration for matrix A is fine 
                 //we need to copy the partial tile of matrix b into shared memory buffer
-                edge_cells_B_buffer[threadIdx.y][threadIdx.x] = d_B[y_tiled_offset][global_edge_x];
+                edgeCellsBBuffer[threadIdx.y][threadIdx.x] = dB[yTiledOffset][globalEdgeX];
             }
             
             //safe to call this since all threads in this block are guarunteed to come to this section
@@ -259,12 +259,12 @@ __global__ void matrixMulCUDATiled()
             __syncthreads();
             
             //if the new x index is within C_WIDTH
-            if (global_edge_x < C_WIDTH)
+            if (globalEdgeX < C_WIDTH)
             {
                 //compute the partial sum of products for the edge cell of C
-                for (int i = 0; i < buffer_end; i++)
+                for (int i = 0; i < bufferEnd; i++)
                 {
-                    total_x_overflow += chunk_A_buffer[threadIdx.y][i] * edge_cells_B_buffer[i][threadIdx.x];
+                    totalXOverflow += chunkABuffer[threadIdx.y][i] * edgeCellsBBuffer[i][threadIdx.x];
                 }
             }
             
@@ -274,7 +274,7 @@ __global__ void matrixMulCUDATiled()
         
         
         //Then check if the current thread is in a block that is on the y edge
-        if (remaining_cells_y && blockIdx.y == gridDim.y - 1)
+        if (remainingCellsY && blockIdx.y == gridDim.y - 1)
         {
             
             /**
@@ -283,11 +283,11 @@ __global__ void matrixMulCUDATiled()
                 2. check to see if the row corresponding to the current tile iteration
                     is within the height of B since the tile size are not guarunteed to be evenly divisible by te hieght of B
             */
-            if (global_edge_y < C_HEIGHT && x_tiled_offset < A_WIDTH)
+            if (globalEdgeY < C_HEIGHT && xTiledOffset < A_WIDTH)
             {
                 //the shared memory buffer that was copied on this tile iteration for matrix A is fine 
                 //we need to copy the partial tile of matrix b into shared memory buffer
-                edge_cells_A_buffer[threadIdx.y][threadIdx.x] = d_A[global_edge_y][x_tiled_offset];
+                edgeCellsABuffer[threadIdx.y][threadIdx.x] = dA[globalEdgeY][xTiledOffset];
             }
             
             //safe to call this since all threads in this block are guarunteed to come to this section
@@ -295,12 +295,12 @@ __global__ void matrixMulCUDATiled()
             __syncthreads();
             
             //if the new y index is within C_HEIGHT
-            if (global_edge_y < C_HEIGHT)
+            if (globalEdgeY < C_HEIGHT)
             {
                 // compute the partial sum now
-                for (int i = 0; i < buffer_end; i++)
+                for (int i = 0; i < bufferEnd; i++)
                 {
-                    total_y_overflow += edge_cells_A_buffer[threadIdx.y][i] * chunk_B_buffer[i][threadIdx.x];
+                    totalYOverflow += edgeCellsABuffer[threadIdx.y][i] * chunkBBuffer[i][threadIdx.x];
                 }
             }
 
@@ -309,37 +309,37 @@ __global__ void matrixMulCUDATiled()
         }
 
         //last edge case - corner block that is edge in x and y dimension
-        if (remaining_cells_x && remaining_cells_y && 
+        if (remainingCellsX && remainingCellsY && 
             blockIdx.x == gridDim.x - 1 && blockIdx.y == gridDim.y - 1)
         {
 
             //check to see if the new threads made by offset are within the bounds
-            if (global_edge_x < C_WIDTH && global_edge_y < C_HEIGHT)
+            if (globalEdgeX < C_WIDTH && globalEdgeY < C_HEIGHT)
             {
                 //compute partial sum for each tile
-                for (int i = 0; i < buffer_end; i++)
+                for (int i = 0; i < bufferEnd; i++)
                 {
-                    total_corner_overflow += edge_cells_A_buffer[threadIdx.y][i] * edge_cells_B_buffer[i][threadIdx.x];
+                    totalCornerOverflow += edgeCellsABuffer[threadIdx.y][i] * edgeCellsBBuffer[i][threadIdx.x];
                 }
             }
         }   
     }
 
-    d_C[global_y][global_x] = total;
+    dC[globalY][globalX] = total;
 
-    if (remaining_cells_x && blockIdx.x == gridDim.x - 1 && global_edge_x < C_WIDTH)
+    if (remainingCellsX && blockIdx.x == gridDim.x - 1 && globalEdgeX < C_WIDTH)
     {
-        d_C[global_y][global_edge_x] = total_x_overflow;
+        dC[globalY][globalEdgeX] = totalXOverflow;
     }
-    if (remaining_cells_y && blockIdx.y == gridDim.y - 1 && global_edge_y < C_HEIGHT)
+    if (remainingCellsY && blockIdx.y == gridDim.y - 1 && globalEdgeY < C_HEIGHT)
     {
-        d_C[global_edge_y][global_x] = total_y_overflow;
+        dC[globalEdgeY][globalX] = totalYOverflow;
     }
-    if (remaining_cells_x && remaining_cells_y &&
+    if (remainingCellsX && remainingCellsY &&
         blockIdx.x == gridDim.x - 1 && blockIdx.y == gridDim.y - 1 &&
-        global_edge_x < C_WIDTH && global_edge_y < C_HEIGHT)
+        globalEdgeX < C_WIDTH && globalEdgeY < C_HEIGHT)
     {
-        d_C[global_edge_y][global_edge_x] = total_corner_overflow;
+        dC[globalEdgeY][globalEdgeX] = totalCornerOverflow;
     }
     
 
@@ -349,7 +349,7 @@ __global__ void matrixMulCUDATiled()
 
 int mainMatrix(int modeArg)
 {
-    unsigned int mem_size_A, mem_size_B, mem_size_C;
+    unsigned int memSizeA, memSizeB, memSizeC;
     unsigned int x, y;
     float msec;
     cudaEvent_t start, stop;
@@ -361,32 +361,32 @@ int mainMatrix(int modeArg)
         return 1;
     }
 
-    mem_size_A = sizeof(float) * A_WIDTH * A_HEIGHT;
-    mem_size_B = sizeof(float) * B_WIDTH * B_HEIGHT;
-    mem_size_C = sizeof(float) * C_WIDTH * C_HEIGHT;
+    memSizeA = sizeof(float) * A_WIDTH * A_HEIGHT;
+    memSizeB = sizeof(float) * B_WIDTH * B_HEIGHT;
+    memSizeC = sizeof(float) * C_WIDTH * C_HEIGHT;
 
     // Initialise A
     for (y = 0; y < A_HEIGHT; y++)
     {
-        for (x = 0; x <A_WIDTH; x++)
+        for (x = 0; x < A_WIDTH; x++)
         {
-            h_A[y][x] = (float)rand() / RAND_MAX;
+            hA[y][x] = (float)rand() / RAND_MAX;
         }
     }
     // Initialise B
     for (y = 0; y < B_HEIGHT; y++)
     {
-        for (x = 0; x <B_WIDTH; x++)
+        for (x = 0; x < B_WIDTH; x++)
         {
-            h_B[y][x] = (float)rand() / RAND_MAX;
+            hB[y][x] = (float)rand() / RAND_MAX;
         }
     }
 
     // copy host memory to device
     if (mode > 0)
     {
-        CHECK_ERROR(cudaMemcpyToSymbol(d_A, h_A, mem_size_A));
-        CHECK_ERROR(cudaMemcpyToSymbol(d_B, h_B, mem_size_B));
+        CHECK_ERROR(cudaMemcpyToSymbol(dA, hA, memSizeA));
+        CHECK_ERROR(cudaMemcpyToSymbol(dB, hB, memSizeB));
     }
 
     // Start timing
@@ -401,7 +401,7 @@ int mainMatrix(int modeArg)
     switch (mode)
     {
         case 0: printf("Running CPU version\n");
-            matrixMulCPU(h_A, h_B, h_C);
+            matrixMulCPU(hA, hB, hC);
             break;
         case 1: printf("Running naive GPU version\n");
             matrixMulCUDA<<<grid, threads>>>();
@@ -423,17 +423,17 @@ int mainMatrix(int modeArg)
     // Copy result from device to host
     if (mode > 0)
     {
-        CHECK_ERROR(cudaMemcpyFromSymbol(h_C, d_C, mem_size_C));
+        CHECK_ERROR(cudaMemcpyFromSymbol(hC, dC, memSizeC));
     }
 
     // compare the GPU results against the CPU results
     if (mode > 0)
     {
         // Compute reference CPU version
-        matrixMulCPU(h_A, h_B, h_C_ref);
+        matrixMulCPU(hA, hB, hCRef);
 
         // Check for errors
-        matrixMulTest(h_C, h_C_ref);
+        matrixMulTest(hC, hCRef);
     }
 
     printf("Completed in %f msec\n", msec);
