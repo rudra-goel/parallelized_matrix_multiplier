@@ -25,6 +25,9 @@ link_directories(${PROJECT_SOURCE_DIR}/lib)
 
 set(SOURCES ${PROJECT_SOURCE_DIR}/MatmulViz.cpp ${PROJECT_SOURCE_DIR}/matrix.cu)
 
+file(COPY ${PROJECT_SOURCE_DIR}/arial.ttf DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+file(COPY ${PROJECT_SOURCE_DIR}/data.csv DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
 add_executable(MatmulViz ${SOURCES})
 
 include_directories(${PROJECT_SOURCE_DIR}/SFML/include)
