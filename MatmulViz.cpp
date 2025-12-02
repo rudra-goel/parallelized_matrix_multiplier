@@ -1,13 +1,11 @@
 /* 
-Author: Jackie Mac Hale
-Class: ECE6122 A
-Last Date Modified: 10/3/2025
+Author: Rudra Goel, Jackie Mac Hale
+Class: ECE4122 A, ECE6122 A
+Last Date Modified: 12/2/2025
 
 Description: 
 
-This file contains all of the window rendering and pixel drawing for Conway's
-Game Of Life. It supports single-threaded, multi-threaded (std::thread), and
-OpenMP-based parallelism.
+
 
 */ 
 
@@ -16,6 +14,8 @@ OpenMP-based parallelism.
 #include <iostream>
 #include <random>
 #include <chrono>
+#include <fstream>
+#include <sstream>
 
 /** @brief Width of the SFML render window. */
 int windowWidth = 1920;
@@ -32,7 +32,7 @@ int matOut[32][32];
 
 int mode = 0;
 
-int mainMatrix(int argc, char **argv);
+int mainMatrix(int modeArg);
 
 /**
  * @brief Entry point for the Game of Life application.
@@ -56,6 +56,9 @@ int main(int argc, char* argv[])
     std::string naiveMethod = "n";
     std::string tilingMethod = "ef";
     std::string cpuMethod = "c";
+    std::string fileArg = "--data";
+
+    bool dataFileProvided = false;
 
     for (int i = 1; i < argc - 1; i += 2)
     {
@@ -63,15 +66,15 @@ int main(int argc, char* argv[])
         {
             if (argv[i+1] == naiveMethod)
             {
-                mode = 0;
+                mode = 1;
             }
             else if (argv[i+1] == tilingMethod)
             {
-                mode = 1;
+                mode = 2;
             }
             else if (argv[i+1] == cpuMethod)
             {
-                mode = 2;
+                mode = 0;
             }
             else
             {
@@ -79,17 +82,55 @@ int main(int argc, char* argv[])
                 return 1;
             }
         }
-    }
-    // mainMatrix(argc, argv);
-
-    for (int i = 0; i < matrixHeight; i++)
-    {
-        for (int j = 0; j < matrixWidth; j++)
+        else if (argv[i] == fileArg)
         {
-            matA[i][j] = distrib(gen);
-            matB[i][j] = distrib(gen);
+            std::ifstream inFile(argv[i+1]);
+            if (!inFile.is_open())
+            {
+                std::cerr << "Error opening file for reading. Check that the file exists." << std::endl;
+                return 1;
+            }
+
+            std::string line;
+            int i = 0;
+            while (std::getline(inFile, line))
+            {
+                int j = 0;
+                std::vector<int> numbers;
+                std::stringstream ss(line);
+                std::string cell;
+                while (std::getline(ss, cell, ','))
+                {
+                    if (i < 32)
+                    {
+                        matA[i][j] = std::stoi(cell);
+                    }
+                    else
+                    {
+                        matB[i % 32][j] = std::stoi(cell);
+                    }
+                    j++;
+                }
+                i++;
+            }
+
+            dataFileProvided = true;
         }
     }
+
+    if (!dataFileProvided)
+    {
+        for (int i = 0; i < matrixHeight; i++)
+        {
+            for (int j = 0; j < matrixWidth; j++)
+            {
+                matA[i][j] = distrib(gen);
+                matB[i][j] = distrib(gen);
+            }
+        }
+    }
+
+    mainMatrix(mode);
 
     // Create render window
     sf::VideoMode vm(windowWidth, windowHeight);
@@ -210,6 +251,76 @@ int main(int argc, char* argv[])
     sf::RectangleShape matATileRect(sf::Vector2f(matAHeight / 8.0f, matAHeight / 8.0f));
     sf::RectangleShape matBTileRect(sf::Vector2f(matBHeight / 8.0f, matBHeight / 8.0f));
     sf::RectangleShape matOutTileRect(sf::Vector2f(matOutHeight / 8.0f, matOutHeight / 8.0f));
+    sf::RectangleShape matASharedMem(sf::Vector2f(matAHeight / 8.0f, matAHeight / 8.0f));
+    sf::RectangleShape matBSharedMem(sf::Vector2f(matBHeight / 8.0f, matBHeight / 8.0f));
+    sf::VertexArray matASharedMemLines(sf::Lines, (matrixWidth / 8 - 1) * 2 + (matrixHeight / 8 - 1) * 2);
+    sf::VertexArray matBSharedMemLines(sf::Lines, (matrixWidth / 8 - 1) * 2 + (matrixHeight / 8 - 1) * 2);
+
+    float matASharedMemLeftEdgeX = 200;
+    float matASharedMemTopEdgeY = 700;
+    float matASharedMemHeight = matAHeight / 8;
+    float matBSharedMemLeftEdgeX = 637.5;
+    float matBSharedMemTopEdgeY = matASharedMemTopEdgeY;
+    float matBSharedMemHeight = matASharedMemHeight;
+
+    matASharedMem.setOutlineColor(sf::Color(255, 165, 0));
+    matASharedMem.setPosition(matASharedMemLeftEdgeX, matASharedMemTopEdgeY);
+    matASharedMem.setOutlineThickness(1);
+    matBSharedMem.setOutlineColor(sf::Color(255, 165, 0));
+    matBSharedMem.setPosition(matBSharedMemLeftEdgeX, matBSharedMemTopEdgeY);
+    matBSharedMem.setOutlineThickness(1);
+
+    for (int i = 1; i <= matASharedMemLines.getVertexCount(); i++)
+    {
+        matASharedMemLines[i-1].color = sf::Color::Black;
+        matBSharedMemLines[i-1].color = sf::Color::Black;
+        // Vertical lines
+        if (i <= matASharedMemLines.getVertexCount() / 2)
+        {
+            if (i % 2 == 1)
+            {
+                matASharedMemLines[i-1].position = sf::Vector2f(matASharedMemLeftEdgeX + matASharedMemHeight / (matrixWidth / 8) * std::ceil(i / 2.0f), matASharedMemTopEdgeY);
+                matBSharedMemLines[i-1].position = sf::Vector2f(matBSharedMemLeftEdgeX + matBSharedMemHeight / (matrixWidth / 8) * std::ceil(i / 2.0f), matBSharedMemTopEdgeY);
+            }
+            else
+            {
+                matASharedMemLines[i-1].position = sf::Vector2f(matASharedMemLeftEdgeX + matASharedMemHeight / (matrixWidth / 8) * (i / 2), matASharedMemHeight + matASharedMemTopEdgeY);
+                matBSharedMemLines[i-1].position = sf::Vector2f(matBSharedMemLeftEdgeX + matBSharedMemHeight / (matrixWidth / 8) * (i / 2), matBSharedMemHeight + matBSharedMemTopEdgeY);
+            }
+        }
+        // Horizontal lines
+        else
+        {
+            int j = i - matASharedMemLines.getVertexCount() / 2;
+            if (j % 2 == 1)
+            {
+                matASharedMemLines[i-1].position = sf::Vector2f(matASharedMemLeftEdgeX, matASharedMemTopEdgeY + matASharedMemHeight / (matrixHeight / 8) * std::ceil(j / 2.0f));
+                matBSharedMemLines[i-1].position = sf::Vector2f(matBSharedMemLeftEdgeX, matBSharedMemTopEdgeY + matBSharedMemHeight / (matrixHeight / 8) * std::ceil(j / 2.0f));
+            }
+            else
+            {
+                matASharedMemLines[i-1].position = sf::Vector2f(matASharedMemLeftEdgeX + matASharedMemHeight, matASharedMemTopEdgeY + matASharedMemHeight / (matrixHeight / 8) * (j / 2));
+                matBSharedMemLines[i-1].position = sf::Vector2f(matBSharedMemLeftEdgeX + matBSharedMemHeight, matBSharedMemTopEdgeY + matBSharedMemHeight / (matrixHeight / 8) * (j / 2));
+            }
+        }
+    }
+
+    sf::Text matASharedMemNumberTexts[4 * 4];
+    sf::Text matBSharedMemNumberTexts[4 * 4];
+    for (int i = 0; i < 4 * 4; i++)
+    {
+        matASharedMemNumberTexts[i].setFont(font);
+        matASharedMemNumberTexts[i].setString(std::to_string(matA[i / 4][i % 4]));
+        matASharedMemNumberTexts[i].setCharacterSize(12);
+        matASharedMemNumberTexts[i].setFillColor(sf::Color::Red);
+        matASharedMemNumberTexts[i].setPosition(matASharedMemLeftEdgeX + 2.5 + matASharedMemHeight / 4 * (i % 4), matASharedMemTopEdgeY - 1.5 + matASharedMemHeight / 4 * (i / 4));
+
+        matBSharedMemNumberTexts[i].setFont(font);
+        matBSharedMemNumberTexts[i].setString(std::to_string(matB[i / 4][i % 4]));
+        matBSharedMemNumberTexts[i].setCharacterSize(12);
+        matBSharedMemNumberTexts[i].setFillColor(sf::Color::Red);
+        matBSharedMemNumberTexts[i].setPosition(matBSharedMemLeftEdgeX + 2.5 + matBSharedMemHeight / 4 * (i % 4), matBSharedMemTopEdgeY - 1.5 + matBSharedMemHeight / 4 * (i / 4));
+    }
 
     // Naive CUDA
     sf::RectangleShape matACurrRowRect(sf::Vector2f(matAHeight, matAHeight / 32.0f));
@@ -253,7 +364,7 @@ int main(int argc, char* argv[])
     float matOutCurrElemY = 50;
 
     std::string str;
-    if (mode == 2)
+    if (mode == 0)
     {
         matOut[0][0] = matA[0][0] * matB[0][0];
         matOutNumberTexts[0].setString(std::to_string(matOut[0][0]));
@@ -263,7 +374,7 @@ int main(int argc, char* argv[])
             matOutNumberTexts[0].setPosition(matOutLeftEdgeX + 6.5, matOutNumberTexts[0].getPosition().y);
         }
     }
-    else if (mode == 0)
+    else if (mode == 1)
     {
         for (int i = 0; i < matrixHeight; i++)
         {
@@ -284,7 +395,7 @@ int main(int argc, char* argv[])
             matOutNumberTexts[0].setPosition(matOutLeftEdgeX + 0.5, matOutNumberTexts[0].getPosition().y);
         }
     }
-    else if (mode == 1)
+    else if (mode == 2)
     {
         for (int i = 0; i < matrixHeight / 8; i++)
         {
@@ -324,34 +435,25 @@ int main(int argc, char* argv[])
     int matOutCurrTileY = 0;
 
     int totalIterations;
+    int millisToWait = 0;
 
-    if (mode == 0)
+    if (mode == 1)
     {
         totalIterations = 32 * 32;
+        millisToWait = 20;
+    }
+    else if (mode == 0)
+    {
+        totalIterations = 32 * 32 * 32;
+        millisToWait = 20;
     }
     else if (mode == 2)
     {
-        totalIterations = 32 * 32 * 32;
-    }
-    else if (mode == 1)
-    {
         totalIterations = 8 * 8 * 8;
+        millisToWait = 250;
     }
 
-    // Double check
-    // int matOutCpu[32][32];
-    // for (int i = 0; i < 32; i++)
-    // {
-    //     for (int j = 0; j < 32; j++)
-    //     {
-    //         for (int k = 0; k < 32; k++)
-    //         {
-    //             matOutCpu[i][j] += matA[i][k] * matB[k][j];
-    //         }
-    //         std::cout << matOutCpu[i][j] << ",";
-    //     }
-    //     std::cout << std::endl;
-    // }
+    bool copiedToSharedMem = false;
 
     // Main Game Loop
     while (window.isOpen())
@@ -372,14 +474,14 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (iterationTimer.getElapsedTime().asMilliseconds() > 20)
+        if (iterationTimer.getElapsedTime().asMilliseconds() > millisToWait)
         {
             iterationTimer.restart();
             if (iteration < totalIterations - 1)
             {
-                ++iteration;
-                if (mode == 0)
+                if (mode == 1)
                 {
+                    ++iteration;
                     if (iteration % 32 == 0)
                     {
                         matACurrRow++;
@@ -408,8 +510,9 @@ int main(int argc, char* argv[])
                         matOutNumberTexts[32 * matACurrRow + matBCurrCol].setPosition(matOutLeftEdgeX + 0.5 + matOutHeight / 32 * ((32 * matACurrRow + matBCurrCol) % 32), matOutNumberTexts[32 * matACurrRow + matBCurrCol].getPosition().y);
                     }
                 }
-                else if (mode == 2)
+                else if (mode == 0)
                 {
+                    ++iteration;
                     if (iteration % (32 * 32) == 0)
                     {
                         i++;
@@ -453,50 +556,65 @@ int main(int argc, char* argv[])
                         matOutNumberTexts[32 * i + j].setPosition(matOutLeftEdgeX + 0.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[32 * i + j].getPosition().y);
                     }
                 }
-                else if (mode == 1)
+                else if (mode == 2)
                 {
-                    if (iteration % (8 * 8) == 0)
+                    if (copiedToSharedMem)
                     {
-                        matOutCurrTileX = 0;
-                        matOutCurrTileY++;
-                        matACurrTileX = 0;
-                        matACurrTileY++;
-                        matBCurrTileX = 0;
-                        matBCurrTileY = 0;
-                    }
-                    else if (iteration % 8 == 0)
-                    {
-                        matOutCurrTileX++;
-                        matACurrTileX = 0;
-                        matBCurrTileX++;
-                        matBCurrTileY = 0;
+                        iteration++;
+                        copiedToSharedMem = false;
+                        if (iteration % (8 * 8) == 0)
+                        {
+                            matOutCurrTileX = 0;
+                            matOutCurrTileY++;
+                            matACurrTileX = 0;
+                            matACurrTileY++;
+                            matBCurrTileX = 0;
+                            matBCurrTileY = 0;
+                        }
+                        else if (iteration % 8 == 0)
+                        {
+                            matOutCurrTileX++;
+                            matACurrTileX = 0;
+                            matBCurrTileX++;
+                            matBCurrTileY = 0;
+                        }
+                        else
+                        {
+                            matACurrTileX++;
+                            matBCurrTileY++;
+                        }
                     }
                     else
                     {
-                        matACurrTileX++;
-                        matBCurrTileY++;
-                    }
-                    for (int i = 0 + 4 * matOutCurrTileY; i < matrixHeight / 8 + 4 * matOutCurrTileY; i++)
-                    {
-                        for (int j = 0 + 4 * matOutCurrTileX; j < matrixWidth / 8 + 4 * matOutCurrTileX; j++)
+                        copiedToSharedMem = true;
+                        for (int i = 0; i < 4 * 4; i++)
                         {
-                            for (int k = 0 + 4 * matACurrTileX; k < matrixWidth / 8 + 4 * matACurrTileX; k++)
+                            matASharedMemNumberTexts[i].setString(std::to_string(matA[matACurrTileY * 4 + i / 4][matACurrTileX * 4 + i % 4]));
+                            matBSharedMemNumberTexts[i].setString(std::to_string(matB[matBCurrTileY * 4 + i / 4][matBCurrTileX * 4 + i % 4]));
+                        }
+
+                        for (int i = 0 + 4 * matOutCurrTileY; i < matrixHeight / 8 + 4 * matOutCurrTileY; i++)
+                        {
+                            for (int j = 0 + 4 * matOutCurrTileX; j < matrixWidth / 8 + 4 * matOutCurrTileX; j++)
                             {
-                                matOut[i][j] += matA[i][k] * matB[k][j];
-                            }
-                            matOutNumberTexts[matrixHeight * i + j].setString(std::to_string(matOut[i][j]));
-                            str = matOutNumberTexts[matrixHeight * i + j].getString();
-                            if (str.length() == 2)
-                            {
-                                matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 6.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
-                            }
-                            else if (str.length() == 3)
-                            {
-                                matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 3.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
-                            }
-                            else if (str.length() == 4)
-                            {
-                                matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 0.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
+                                for (int k = 0 + 4 * matACurrTileX; k < matrixWidth / 8 + 4 * matACurrTileX; k++)
+                                {
+                                    matOut[i][j] += matA[i][k] * matB[k][j];
+                                }
+                                matOutNumberTexts[matrixHeight * i + j].setString(std::to_string(matOut[i][j]));
+                                str = matOutNumberTexts[matrixHeight * i + j].getString();
+                                if (str.length() == 2)
+                                {
+                                    matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 6.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
+                                }
+                                else if (str.length() == 3)
+                                {
+                                    matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 3.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
+                                }
+                                else if (str.length() == 4)
+                                {
+                                    matOutNumberTexts[matrixHeight * i + j].setPosition(matOutLeftEdgeX + 0.5 + matOutHeight / 32 * ((32 * i + j) % 32), matOutNumberTexts[matrixHeight * i + j].getPosition().y);
+                                }
                             }
                         }
                     }
@@ -504,46 +622,58 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (mode == 0)
+        if (mode == 1)
         {
             matACurrRowRect.setPosition(matALeftEdgeX, matATopEdgeY + matAHeight / 32.0f * matACurrRow);
             matBCurrColRect.setPosition(matBLeftEdgeX + matBHeight / 32.0f * matBCurrCol, matBTopEdgeY);
             matOutCurrElem.setPosition(matOutLeftEdgeX + matOutHeight / 32.0f * matBCurrCol, 50 + matOutHeight / 32.0f * matACurrRow);
         }
-        else if (mode == 2)
+        else if (mode == 0)
         {
             matACurrElem.setPosition(matACurrElemX, matACurrElemY);
             matBCurrElem.setPosition(matBCurrElemX, matBCurrElemY);
             matOutCurrElem.setPosition(matOutCurrElemX, matOutCurrElemY);
         }
-        else if (mode == 1)
+        else if (mode == 2)
         {
-            matATileRect.setPosition(matALeftEdgeX + matACurrTileX * matAHeight / 8.0f, matATopEdgeY + matACurrTileY * matAHeight / 8.0f);
-            matBTileRect.setPosition(matBLeftEdgeX + matBCurrTileX * matAHeight / 8.0f, matBTopEdgeY + matBCurrTileY * matAHeight / 8.0f);
-            matOutTileRect.setPosition(matOutLeftEdgeX + matOutCurrTileX * matOutHeight / 8.0f, 50 + matOutCurrTileY * matOutHeight / 8.0f);
+            if (!copiedToSharedMem)
+            {
+                matATileRect.setPosition(matALeftEdgeX + matACurrTileX * matAHeight / 8.0f, matATopEdgeY + matACurrTileY * matAHeight / 8.0f);
+                matBTileRect.setPosition(matBLeftEdgeX + matBCurrTileX * matAHeight / 8.0f, matBTopEdgeY + matBCurrTileY * matAHeight / 8.0f);
+                matOutTileRect.setPosition(matOutLeftEdgeX + matOutCurrTileX * matOutHeight / 8.0f, 50 + matOutCurrTileY * matOutHeight / 8.0f);
+            }
+            else
+            {
+                matATileRect.setPosition(matASharedMemLeftEdgeX, matASharedMemTopEdgeY);
+                matBTileRect.setPosition(matBSharedMemLeftEdgeX, matBSharedMemTopEdgeY);
+            }
         }
 
         window.clear(sf::Color::White);
         window.draw(matAOutline);
         window.draw(matBOutline);
         window.draw(matOutOutline);
-        if (mode == 0)
+        if (mode == 1)
         {
             window.draw(matACurrRowRect);
             window.draw(matBCurrColRect);
             window.draw(matOutCurrElem);
         }
-        else if (mode == 2)
+        else if (mode == 0)
         {
             window.draw(matACurrElem);
             window.draw(matBCurrElem);
             window.draw(matOutCurrElem);
         }
-        else if (mode == 1)
+        else if (mode == 2)
         {
+            window.draw(matASharedMem);
+            window.draw(matBSharedMem);
             window.draw(matATileRect);
             window.draw(matBTileRect);
             window.draw(matOutTileRect);
+            window.draw(matASharedMemLines);
+            window.draw(matBSharedMemLines);
         }
         window.draw(matALines);
         window.draw(matBLines);
@@ -556,8 +686,16 @@ int main(int argc, char* argv[])
             window.draw(matBNumberTexts[i]);
             window.draw(matOutNumberTexts[i]);
         }
+        if (mode == 2)
+        {
+            for (int i = 0; i < 4 * 4; i++)
+            {
+                window.draw(matASharedMemNumberTexts[i]);
+                window.draw(matBSharedMemNumberTexts[i]);
+            }
+        }
         window.display();
-        std::cout << "FPS: " << 1.0f / processingClock.restart().asSeconds() << std::endl;
+        // std::cout << "FPS: " << 1.0f / processingClock.restart().asSeconds() << std::endl;
         
         // Measure processing time
         processingTime += processingClock.getElapsedTime().asMicroseconds();

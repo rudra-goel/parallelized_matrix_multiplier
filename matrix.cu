@@ -300,22 +300,12 @@ __global__ void matrixMulCUDATiled() {
 }
 
 // int main(int argc, char **argv) {
-int mainMatrix(int argc, char **argv) {
+int mainMatrix(int modeArg) {
     unsigned int mem_size_A, mem_size_B, mem_size_C;
     unsigned int x, y;
     float msec;
     cudaEvent_t start, stop;
-    int mode;
-
-    if (argc != 2) {
-        printf("Syntax: %s mode\n", argv[0]);
-        printf("where mode is:\n");
-        printf("\t0 - CPU\n"
-               "\t1 - naive GPU\n"
-               "\t2 - tiled shared memory GPU\n");
-        return 1;
-    }
-    mode = atoi(argv[1]);
+    int mode = modeArg;
 
     if (A_WIDTH != B_HEIGHT){
         printf("Error: A_WIDTH and B_HEIGHT do not match\n");
